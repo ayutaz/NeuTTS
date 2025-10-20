@@ -1,3 +1,7 @@
+from phonemizer.backend.espeak.wrapper import EspeakWrapper
+_ESPEAK_LIBRARY = '/opt/homebrew/Cellar/espeak/1.48.04_1/lib/libespeak.1.1.48.dylib'
+EspeakWrapper.set_library(_ESPEAK_LIBRARY)
+
 from typing import Generator
 from pathlib import Path
 import librosa
