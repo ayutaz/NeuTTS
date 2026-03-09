@@ -12,13 +12,20 @@ description = "NeuTTS - a package for text-to-speech generation using Neuphonic'
 readme = "README.md"
 requires-python = ">=3.10, <3.14"
 dependencies = [
+    "datasets>=4.6.1",
     "librosa==0.11.0",
     "neucodec>=0.0.4",
     "numpy~=2.2.6",
     "phonemizer>=3.0.0",
+    "pyyaml>=6.0.3",
     "resemble-perth==1.0.1",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.15.3",
     "soundfile==0.13.1",
+    "tensorboard>=2.20.0",
     "torch>=2.8.0",
+    "torchaudio>=2.10.0",
+    "tqdm>=4.67.3",
     "transformers~=4.56.1",
 ]
 

@@ -40,8 +40,24 @@ class SegmentExtractor:
         random_offset: Trueの場合、切り出し開始位置をランダムに選択する。
     """
 
+    # モードごとのパラメータ: (segment_length, span, skip_rate)
+    # contiguous モードでは span=None, skip_rate=None
+    _MODE_PARAMS: dict[SegmentMode, tuple[int, Optional[int], Optional[int]]] = {
+        SegmentMode.CONTIGUOUS_10: (10, None, None),
+        SegmentMode.CONTIGUOUS_25: (25, None, None),
+        SegmentMode.CONTIGUOUS_50: (50, None, None),
+        SegmentMode.SKIP_50_25: (25, 50, 2),
+        SegmentMode.SKIP_50_10: (10, 50, 5),
+    }
+
     def __init__(self, mode: SegmentMode, random_offset: bool = True) -> None:
-        raise NotImplementedError("SegmentExtractor の実装が必要")
+        self.mode = mode
+        self.random_offset = random_offset
+
+        params = self._MODE_PARAMS[mode]
+        self.segment_length: int = params[0]
+        self.span: Optional[int] = params[1]
+        self.skip_rate: Optional[int] = params[2]
 
     def extract(self, token_ids: torch.Tensor) -> torch.Tensor:
         """トークン列からセグメントを抽出する。
@@ -55,7 +71,28 @@ class SegmentExtractor:
             contiguous_50 -> (50,), skip_50_25 -> (25,),
             skip_50_10 -> (10,)。
         """
-        raise NotImplementedError
+        offset = None if self.random_offset else 0
+
+        if self.span is not None:
+            # skip sampling モード
+            required = self.span
+            if token_ids.shape[0] < required:
+                raise ValueError(
+                    f"トークン列が短すぎます: {token_ids.shape[0]} < "
+                    f"必要なスパン長 {required} (モード: {self.mode.value})"
+                )
+            return self.skip_sample(
+                token_ids, self.span, self.skip_rate, offset=offset  # type: ignore[arg-type]
+            )
+        else:
+            # contiguous cropping モード
+            required = self.segment_length
+            if token_ids.shape[0] < required:
+                raise ValueError(
+                    f"トークン列が短すぎます: {token_ids.shape[0]} < "
+                    f"必要なセグメント長 {required} (モード: {self.mode.value})"
+                )
+            return self.contiguous_crop(token_ids, self.segment_length, offset=offset)
 
     @staticmethod
     def contiguous_crop(
@@ -71,7 +108,11 @@ class SegmentExtractor:
         Returns:
             切り出されたセグメント (length,)。
         """
-        raise NotImplementedError
+        seq_len = token_ids.shape[0]
+        if offset is None:
+            max_offset = seq_len - length
+            offset = torch.randint(0, max_offset + 1, (1,)).item()
+        return token_ids[offset : offset + length]
 
     @staticmethod
     def skip_sample(
@@ -93,4 +134,17 @@ class SegmentExtractor:
         Returns:
             スキップサンプリングされたセグメント (span // skip_rate,)。
         """
-        raise NotImplementedError
+        seq_len = token_ids.shape[0]
+        if offset is None:
+            max_offset = seq_len - span
+            offset = torch.randint(0, max_offset + 1, (1,)).item()
+        span_tokens = token_ids[offset : offset + span]
+        return span_tokens[::skip_rate]
+
+    def get_output_length(self) -> int:
+        """現在のモードにおける出力セグメントのトークン数を返す。
+
+        Returns:
+            出力セグメントのトークン数。
+        """
+        return self.segment_length
