@@ -13,6 +13,7 @@ readme = "README.md"
 requires-python = ">=3.10, <3.14"
 dependencies = [
     "datasets>=4.6.1",
+    "jiwer>=4.0.0",
     "librosa==0.11.0",
     "neucodec>=0.0.4",
     "numpy~=2.2.6",

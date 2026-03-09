@@ -139,7 +139,7 @@ for metric in "${METRIC_LIST[@]}"; do
             # Whisper-large-v3 で合成音声を書き起こし、原文との WER を計算
             # ---------------------------------------------------------------
             info "WER を計算中（Whisper-large-v3 使用）..."
-            CUDA_VISIBLE_DEVICES="${GPU_ID}" python3 -m mspoof_tts.evaluation.evaluate \
+            CUDA_VISIBLE_DEVICES="${GPU_ID}" uv run python -m mspoof_tts.evaluation.evaluate \
                 --metric wer \
                 --synth-dir "${SYNTH_DIR}" \
                 --results-dir "${RESULTS_DIR}" \
@@ -153,7 +153,7 @@ for metric in "${METRIC_LIST[@]}"; do
             # WavLM-base-plus-sv でリファレンスと合成音声の話者埋め込みを比較
             # ---------------------------------------------------------------
             info "話者類似度 (SIM) を計算中（WavLM-base-plus-sv 使用）..."
-            CUDA_VISIBLE_DEVICES="${GPU_ID}" python3 -m mspoof_tts.evaluation.evaluate \
+            CUDA_VISIBLE_DEVICES="${GPU_ID}" uv run python -m mspoof_tts.evaluation.evaluate \
                 --metric sim \
                 --synth-dir "${SYNTH_DIR}" \
                 --reference-dir "${REFERENCE_DIR}" \
@@ -168,7 +168,7 @@ for metric in "${METRIC_LIST[@]}"; do
             # NISQA モデルで知覚品質スコアを推定
             # ---------------------------------------------------------------
             info "NISQA スコアを計算中..."
-            CUDA_VISIBLE_DEVICES="${GPU_ID}" python3 -m mspoof_tts.evaluation.evaluate \
+            CUDA_VISIBLE_DEVICES="${GPU_ID}" uv run python -m mspoof_tts.evaluation.evaluate \
                 --metric nisqa \
                 --synth-dir "${SYNTH_DIR}" \
                 --results-dir "${RESULTS_DIR}" \
@@ -182,7 +182,7 @@ for metric in "${METRIC_LIST[@]}"; do
             # MOSNet モデルで平均オピニオンスコアを推定
             # ---------------------------------------------------------------
             info "MOSNET スコアを計算中..."
-            CUDA_VISIBLE_DEVICES="${GPU_ID}" python3 -m mspoof_tts.evaluation.evaluate \
+            CUDA_VISIBLE_DEVICES="${GPU_ID}" uv run python -m mspoof_tts.evaluation.evaluate \
                 --metric mosnet \
                 --synth-dir "${SYNTH_DIR}" \
                 --results-dir "${RESULTS_DIR}" \
