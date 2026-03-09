@@ -38,3 +38,8 @@ all = ["llama-cpp-python", "onnxruntime"]
 [tool.scikit-build]
 # Include the espeak-ng-data directory that cmake copies into the package
 wheel.packages = ["neutts", "neuttsair"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
