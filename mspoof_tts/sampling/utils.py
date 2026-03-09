@@ -17,7 +17,13 @@ def apply_temperature(logits: torch.Tensor, temperature: float) -> torch.Tensor:
     Returns:
         温度スケーリング済みロジット。
     """
-    raise NotImplementedError
+    if temperature <= 0:
+        raise ValueError(
+            f"temperature must be positive, got {temperature}"
+        )
+    if temperature == 1.0:
+        return logits
+    return logits / temperature
 
 
 def top_k_filter(logits: torch.Tensor, k: int) -> torch.Tensor:
@@ -32,7 +38,14 @@ def top_k_filter(logits: torch.Tensor, k: int) -> torch.Tensor:
     Returns:
         フィルタリング済みロジット。
     """
-    raise NotImplementedError
+    if k <= 0:
+        return logits
+    vocab_size = logits.size(-1)
+    if k >= vocab_size:
+        return logits
+    top_k_val = torch.topk(logits, k, dim=-1).values[..., -1:]
+    logits = logits.masked_fill(logits < top_k_val, float('-inf'))
+    return logits
 
 
 def nucleus_sample(
@@ -51,7 +64,32 @@ def nucleus_sample(
     Returns:
         サンプリングされたトークンID。
     """
-    raise NotImplementedError
+    squeezed = logits.dim() == 1
+    if squeezed:
+        logits = logits.unsqueeze(0)
+
+    logits = apply_temperature(logits, temperature)
+
+    sorted_logits, sorted_indices = torch.sort(logits, dim=-1, descending=True)
+    cumulative_probs = torch.cumsum(
+        torch.softmax(sorted_logits, dim=-1), dim=-1
+    )
+
+    # Mask tokens where cumulative probability exceeds top_p,
+    # but always keep at least the top token.
+    sorted_mask = cumulative_probs - torch.softmax(sorted_logits, dim=-1) >= top_p
+    sorted_logits = sorted_logits.masked_fill(sorted_mask, float('-inf'))
+
+    # Sample from the filtered distribution.
+    probs = torch.softmax(sorted_logits, dim=-1)
+    sampled_sorted = torch.multinomial(probs, num_samples=1)
+
+    # Map back to original token indices.
+    token_ids = sorted_indices.gather(dim=-1, index=sampled_sorted)
+
+    if squeezed:
+        token_ids = token_ids.squeeze(0)
+    return token_ids
 
 
 def compute_entropy(probs: torch.Tensor) -> torch.Tensor:
@@ -65,7 +103,8 @@ def compute_entropy(probs: torch.Tensor) -> torch.Tensor:
     Returns:
         エントロピー値。
     """
-    raise NotImplementedError
+    clamped = torch.clamp(probs, min=1e-12)
+    return -(probs * torch.log(clamped)).sum(dim=-1)
 
 
 def rank_tokens(logits: torch.Tensor) -> torch.Tensor:
@@ -79,4 +118,6 @@ def rank_tokens(logits: torch.Tensor) -> torch.Tensor:
     Returns:
         各トークンのランク。形状は入力と同じ。
     """
-    raise NotImplementedError
+    return torch.argsort(
+        torch.argsort(logits, dim=-1, descending=True), dim=-1
+    )
