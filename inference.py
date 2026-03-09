@@ -138,6 +138,46 @@ def generate_with_eas(
     return generated_ids
 
 
+def generate_with_hierarchical(
+    model: NeuTTS,
+    prompt_ids: list[int],
+    hierarchical_decoder: "HierarchicalDecoder",
+    max_new_tokens: int = 2048,
+    device: str = "cpu",
+) -> list[int]:
+    """階層的デコーディングによるトークン生成。
+
+    HierarchicalDecoder.generate() を使用して、ウォームアップ後に
+    3ステージのビームサーチ・枝刈り・ランク集約を反復的に実行する。
+
+    Args:
+        model: NeuTTS インスタンス。backbone と tokenizer にアクセスする。
+        prompt_ids: プロンプトのトークンID列 (list[int])。
+        hierarchical_decoder: HierarchicalDecoder インスタンス。
+        max_new_tokens: 生成する最大トークン数。
+        device: 推論デバイス ("cpu" / "cuda" / "mps" など)。
+
+    Returns:
+        生成されたトークンID列 (プロンプトを含まない)。
+    """
+    backbone = model.backbone
+    tokenizer = model.tokenizer
+
+    eos_token_id = tokenizer.convert_tokens_to_ids("<|SPEECH_GENERATION_END|>")
+
+    prefix = torch.tensor(prompt_ids, dtype=torch.long).to(device)
+
+    # HierarchicalDecoder.generate() は backbone を直接使用する
+    # speaker_tokens は既にプロンプトに含まれているため空テンソルを渡す
+    generated = hierarchical_decoder.generate(
+        model=backbone,
+        text_tokens=prefix,
+        speaker_tokens=torch.tensor([], dtype=torch.long).to(device),
+    )
+
+    return generated.tolist()
+
+
 def tokens_to_speech_string(
     model: NeuTTS,
     generated_ids: list[int],
@@ -575,6 +615,15 @@ def main() -> None:
     logger.info("MSpoof-TTS 推論")
     logger.info("========================================")
 
+    # モード情報のログ出力
+    if args.mode == "eas":
+        logger.info("デコーディングモード: EAS（Entropy-Aware Sampling のみ）")
+    elif args.mode == "hierarchical":
+        logger.info(
+            "デコーディングモード: 階層的（EAS + マルチ解像度スプーフガイド付きビームサーチ）"
+        )
+        logger.info("  チェックポイントディレクトリ: %s", args.checkpoint_dir)
+
     # 引数の検証
     try:
         validate_args(args)
@@ -669,8 +718,11 @@ def main() -> None:
         from mspoof_tts.sampling.hierarchical import HierarchicalDecoder
 
         logger.info("マルチ解像度スプーフ検出器をロードしています...")
+        # 語彙サイズはトークナイザーから取得する（モデルロード後に上書きされる場合があるため、
+        # ここではデフォルト値を使用し、モデルロード後に再初期化は不要な設計）
+        detector_vocab_size = tts_model.tokenizer.vocab_size
         detectors = MultiResolutionDetector(
-            vocab_size=config.eas.top_k,  # 検出器の語彙サイズはモデル設定に依存
+            vocab_size=detector_vocab_size,
         ).to(device)
         detectors.load_checkpoints(Path(args.checkpoint_dir))
         detectors.eval()
@@ -761,46 +813,39 @@ def main() -> None:
 
         elif args.mode == "hierarchical":
             # -------------------------------------------------------
-            # 階層的デコーディングモード (Phase 5)
+            # 階層的デコーディングモード: EAS + ビームサーチ + 枝刈り
             # -------------------------------------------------------
-            logger.warning(
-                "階層的デコーディングモードは Phase 5 で完全実装予定です。"
-                "現時点では HierarchicalDecoder の実装が NotImplementedError です。"
-            )
-            # 将来の実装:
-            # text_tokens = tts_model.tokenizer.encode(
-            #     tts_model._to_phones(text), add_special_tokens=False
-            # )
-            # text_tensor = torch.tensor(text_tokens, dtype=torch.long).to(device)
-            # speaker_tensor = torch.tensor(ref_codes, dtype=torch.long).to(device)
-            # generated_tensor = hierarchical_decoder.generate(
-            #     model=tts_model.backbone,
-            #     text_tokens=text_tensor,
-            #     speaker_tokens=speaker_tensor,
-            # )
-            # generated_ids = generated_tensor.tolist()
-            # output_str = tokens_to_speech_string(tts_model, generated_ids)
 
-            # 暫定: EASモードにフォールバック
-            logger.info("EASモードにフォールバックします。")
+            # プロンプトの構築 (NeuTTS のチャットテンプレートを使用)
+            logger.info("プロンプトを構築しています...")
             prompt_ids = tts_model._apply_chat_template(
                 ref_codes=ref_codes,
                 ref_text=ref_text,
                 input_text=text,
             )
+            logger.info("  プロンプトトークン数: %d", len(prompt_ids))
+
+            # 階層的デコーディングによるトークン生成
+            logger.info("階層的デコーディングによるトークン生成を開始します...")
             start_time = time.time()
-            generated_ids = generate_with_eas(
+
+            generated_ids = generate_with_hierarchical(
                 model=tts_model,
                 prompt_ids=prompt_ids,
-                eas_sampler=eas_sampler,
+                hierarchical_decoder=hierarchical_decoder,
                 max_new_tokens=args.max_tokens,
                 device=device,
             )
+
             elapsed = time.time() - start_time
             logger.info(
-                "生成完了 (EASフォールバック): %d トークン (%.2f 秒)",
-                len(generated_ids), elapsed,
+                "生成完了: %d トークン (%.2f 秒, %.1f トークン/秒)",
+                len(generated_ids),
+                elapsed,
+                len(generated_ids) / elapsed if elapsed > 0 else 0,
             )
+
+            # トークンIDを speech 文字列に変換
             output_str = tokens_to_speech_string(tts_model, generated_ids)
 
         # ----------------------------------------------------------
