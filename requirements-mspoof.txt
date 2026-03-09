@@ -1,0 +1,31 @@
+# MSpoof-TTS additional dependencies
+# Dependencies for hierarchical spoof-guided decoding and evaluation
+#
+# NOTE: The following packages are already provided by the base neutts package
+# (via pyproject.toml) and are listed here only for completeness / version reference:
+#   torch >= 2.8.0
+#   transformers ~= 4.56.1
+#   numpy ~= 2.2.6
+#   librosa == 0.11.0
+#   soundfile == 0.13.1
+#   neucodec >= 0.0.4
+
+# --- Core dependencies (not in base neutts) ---
+
+# Audio processing (must be compatible with torch >= 2.8.0)
+torchaudio
+
+# Scientific computing
+scipy>=1.10
+scikit-learn>=1.2
+
+# Configuration
+PyYAML>=6.0
+
+# HuggingFace datasets (for LibriTTS download)
+datasets
+
+# --- Optional dependencies ---
+
+# Training visualization
+tensorboard

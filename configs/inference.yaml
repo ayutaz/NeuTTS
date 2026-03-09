@@ -1,0 +1,43 @@
+# 推論・デコーディング設定
+# MSpoof-TTS: Hierarchical Spoof-Guided Decoding
+
+# Entropy-Aware Sampling (EAS) — Algorithm 1
+eas:
+  top_k: 50                # top-kフィルタリングのk値
+  top_p: 0.8               # nucleus samplingの累積確率閾値 (v)
+  temperature: 1.0          # サンプリング温度
+  cluster_size: 3           # メモリに記録するトップトークン数 (k_e)
+  memory_window: 15         # メモリの保持ステップ数 (W)
+  alpha: 0.2                # ペナルティスケール
+  beta: 0.7                 # 時間減衰率
+  gamma: 0.8                # クリッピング上限
+
+# Hierarchical Sampling with Progressive Pruning — Algorithm 2
+hierarchical:
+  warmup: 20                # ウォームアップ長 (L_w)
+  stage_lengths:            # 各ステージのトークン長 [L1, L2, L3]
+    - 10
+    - 25
+    - 50
+  beam_sizes:               # 各ステージのビームサイズ [B0, B1, B2]
+    - 8
+    - 5
+    - 3
+  rank_weights:             # マルチ解像度ランク集約の重み [w_50, w_25, w_10]
+    - 1.0
+    - 1.0
+    - 1.0
+
+# 生成設定
+generation:
+  max_length: 2048          # 最大生成トークン長
+  seed: 42                  # ランダムシード
+
+# 検出器チェックポイント
+detector_checkpoints:
+  dir: checkpoints/detectors
+  M_10: M_10.pt
+  M_25: M_25.pt
+  M_50: M_50.pt
+  M_50_25: M_50_25.pt
+  M_50_10: M_50_10.pt

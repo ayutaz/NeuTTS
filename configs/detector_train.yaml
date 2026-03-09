@@ -1,0 +1,70 @@
+# スプーフ検出器訓練設定
+# MSpoof-TTS: Multi-Resolution Token-Level Spoof Detectors
+
+# モデルアーキテクチャ
+model:
+  d_model: 256            # モデル次元
+  n_heads: 8              # マルチヘッドアテンションのヘッド数
+  n_layers: 4             # Conformerブロックの積み重ね数
+  ffn_dim: 1024           # フィードフォワード層の内部次元数
+  dropout: 0.1            # ドロップアウト率
+
+# オプティマイザ設定
+optimizer:
+  type: AdamW
+  lr: 1.0e-4              # 学習率
+  weight_decay: 1.0e-4    # 重み減衰
+
+# 損失関数
+loss:
+  type: BCE               # Binary Cross-Entropy
+
+# セグメント設定
+segments:
+  # 連続切り出し (contiguous cropping) のセグメント長
+  segment_lengths: [10, 25, 50]
+  # スキップサンプリングのスキップ率
+  skip_rates: [2, 5]
+
+# 5つの検出器の個別設定
+detectors:
+  M_10:
+    mode: contiguous
+    segment_length: 10
+  M_25:
+    mode: contiguous
+    segment_length: 25
+  M_50:
+    mode: contiguous
+    segment_length: 50
+  M_50_25:
+    mode: skip
+    span: 50
+    skip_rate: 2           # 50トークンから25トークンを選択
+  M_50_10:
+    mode: skip
+    span: 50
+    skip_rate: 5           # 50トークンから10トークンを選択
+
+# 訓練設定
+training:
+  batch_size: 64
+  num_epochs: 100
+  num_workers: 4
+  seed: 42
+  gpu: 0                   # NVIDIA L40S x 1
+
+# データ設定
+data:
+  train_splits:
+    - train-clean-100
+    - train-clean-360
+    - train-other-500
+  val_ratio: 0.05
+  test_ratio: 0.05
+
+# チェックポイント設定
+checkpoint:
+  save_dir: checkpoints/detectors
+  save_every: 10           # エポックごと
+  keep_best: true          # 最良モデルを保持
