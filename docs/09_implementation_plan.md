@@ -322,6 +322,63 @@ final_score = w1 × rank(M_50) + w2 × rank(M_50←25) + w3 × rank(M_50←10)
 
 ---
 
+## 2.5 訓練・推論の実行ワークフロー
+
+コード実装（Phase 1〜6）は開発PC上で完了している。実際の訓練はGPU搭載の別PCで実行し、チェックポイントを開発PCに転送して推論・評価を行う。
+
+### 全体ワークフロー
+
+```
+[開発PC (macOS)]                             [訓練PC (Linux + GPU)]
+     │                                             │
+     │  Phase 1〜6: コード実装・テスト (完了)         │
+     │                                             │
+     ├───── リポジトリ転送 ────────────────────────→ │
+     │      (git clone + checkout)                 │
+     │                                             ├── uv sync (環境構築)
+     │                                             ├── prepare_data.sh (データ準備)
+     │                                             ├── train_detectors.sh (検出器訓練×5)
+     │                                             │
+     │ ←───── checkpoints/detectors/*.pt 転送 ────┤
+     │                                             │
+     ├── inference.sh --mode hierarchical           │
+     ├── evaluate.sh                                │
+     └── 結果分析                                    │
+```
+
+### 訓練PCでのコマンド
+
+```bash
+# 1. リポジトリ取得
+git clone <repository-url> && cd NeuTTS
+git checkout feature/mspoof-tts
+
+# 2. 環境構築
+uv sync
+
+# 3. データ準備 + 訓練
+bash scripts/prepare_data.sh --device gpu
+bash scripts/train_detectors.sh --epochs 100 --batch-size 64
+```
+
+### 開発PCでの推論コマンド
+
+```bash
+# チェックポイント転送後
+scp -r user@training-pc:~/NeuTTS/checkpoints/detectors/ ./checkpoints/detectors/
+
+# 推論
+bash scripts/inference.sh --input "Hello world" --reference samples/dave.wav \
+    --output output.wav --mode hierarchical --checkpoint-dir checkpoints/detectors
+
+# 評価
+bash scripts/evaluate.sh
+```
+
+詳細は `docs/05_training.md` の「6. 別PCでの訓練ワークフロー」を参照。
+
+---
+
 ## 3. 主要な依存ライブラリ
 
 | ライブラリ | バージョン要件 | 用途 |

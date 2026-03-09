@@ -150,6 +150,132 @@ LibriTTS (ground-truth 発話)
 
 ---
 
+## 6. 別PCでの訓練ワークフロー
+
+スプーフ検出器の訓練はGPU（NVIDIA L40S等）を搭載した別のPCで行い、訓練済みチェックポイントを開発マシンに転送して推論に使用する。
+
+### 6.1 全体の流れ
+
+```
+[開発PC (macOS)]                         [訓練PC (Linux + GPU)]
+     │                                         │
+     ├── コード開発・テスト                      │
+     │                                         │
+     ├──── リポジトリを転送 ──────────────────→ │
+     │                                         ├── 環境構築 (uv sync)
+     │                                         ├── Stage 1: LibriTTSダウンロード
+     │                                         ├── Stage 2: 合成データ生成
+     │                                         ├── Stage 3: 検出器訓練 (×5)
+     │                                         │
+     │ ←──── チェックポイント (.pt) を転送 ────┤
+     │                                         │
+     ├── 推論 (EAS / hierarchical)              │
+     └── 評価                                   │
+```
+
+### 6.2 訓練PCへの転送ファイル
+
+リポジトリ全体をクローンまたはコピーする。最低限必要なファイル:
+
+```bash
+# リポジトリごとクローン（推奨）
+git clone <repository-url>
+cd NeuTTS
+git checkout feature/mspoof-tts
+
+# または必要ファイルだけ転送する場合:
+# 訓練に必要なファイル一覧
+train.py                          # 訓練エントリポイント
+pyproject.toml                    # 依存関係定義
+uv.lock                          # ロックファイル
+configs/detector_train.yaml       # 訓練設定
+scripts/prepare_data.sh           # データ準備スクリプト
+scripts/train_detectors.sh        # 訓練スクリプト
+mspoof_tts/                       # パッケージ全体
+```
+
+### 6.3 訓練PCでの環境構築
+
+```bash
+# uv のインストール（未インストールの場合）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 依存関係のインストール
+uv sync
+
+# GPU が認識されていることを確認
+uv run python -c "import torch; print(torch.cuda.is_available())"
+```
+
+### 6.4 訓練の実行手順
+
+```bash
+# Step 1: データ準備（LibriTTSダウンロード + 合成データ生成）
+bash scripts/prepare_data.sh --device gpu
+
+# Step 2: 5つのスプーフ検出器を順次訓練
+bash scripts/train_detectors.sh --epochs 100 --batch-size 64 --gpu 0
+
+# 特定の検出器だけ訓練する場合
+bash scripts/train_detectors.sh --detectors M_50,M_25 --gpu 0
+```
+
+訓練完了後、チェックポイントは以下に保存される:
+
+```
+checkpoints/detectors/
+├── M_50/
+│   └── M_50.pt           # best checkpoint
+├── M_25/
+│   └── M_25.pt
+├── M_10/
+│   └── M_10.pt
+├── M_50_25/
+│   └── M_50_25.pt
+└── M_50_10/
+    └── M_50_10.pt
+```
+
+### 6.5 チェックポイントの転送
+
+訓練完了後、5つの `.pt` ファイルを開発PCに転送する:
+
+```bash
+# 訓練PCから開発PCへ転送（scp の例）
+scp -r user@training-pc:~/NeuTTS/checkpoints/detectors/ ./checkpoints/detectors/
+
+# または rsync で
+rsync -avz user@training-pc:~/NeuTTS/checkpoints/detectors/ ./checkpoints/detectors/
+```
+
+### 6.6 開発PCでの推論
+
+転送したチェックポイントを使って推論を実行する:
+
+```bash
+# EASモード（検出器不要）
+bash scripts/inference.sh --input "Hello world" --reference samples/dave.wav \
+    --output output_eas.wav --mode eas
+
+# 階層的デコーディングモード（検出器チェックポイントが必要）
+bash scripts/inference.sh --input "Hello world" --reference samples/dave.wav \
+    --output output_hier.wav --mode hierarchical \
+    --checkpoint-dir checkpoints/detectors
+```
+
+チェックポイントのパスは `configs/inference.yaml` の `detector_checkpoints` セクションでも設定可能。
+
+### 6.7 訓練PC の推奨スペック
+
+| 項目 | 推奨 | 最低限 |
+|------|------|--------|
+| GPU | NVIDIA L40S (48GB) | NVIDIA GPU (16GB VRAM以上) |
+| RAM | 64GB以上 | 32GB |
+| ストレージ | 200GB以上（LibriTTS + 合成データ） | 100GB |
+| OS | Ubuntu 22.04+ | Linux (CUDA対応) |
+
+---
+
 ## 実装の対応関係
 
 ### コード構成
