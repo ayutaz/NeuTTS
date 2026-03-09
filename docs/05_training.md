@@ -147,3 +147,45 @@ LibriTTS (ground-truth 発話)
                               5 つの Conformer 検出器を個別に訓練
                               (M_50, M_25, M_10, M_50←25, M_50←10)
 ```
+
+---
+
+## 実装の対応関係
+
+### コード構成
+
+| 論文の概念 | 実装ファイル | クラス/関数 |
+|-----------|------------|-----------|
+| 訓練パイプライン | `train.py` | メインスクリプト |
+| データ準備 | `mspoof_tts/data/prepare.py` | `prepare_dataset()` |
+| 音声→トークン変換 | `mspoof_tts/data/prepare.py` | `encode_audio_to_tokens()` |
+| 合成音声生成 | `mspoof_tts/data/prepare.py` | `synthesize_utterance()` |
+| 話者ごとの発話収集 | `mspoof_tts/data/prepare.py` | `_collect_speaker_utterances()` |
+| データ分割 | `mspoof_tts/data/prepare.py` | `_assign_splits()` (90/5/5) |
+| セグメント構築 | `mspoof_tts/data/segment.py` | `SegmentExtractor` |
+| 訓練データセット | `mspoof_tts/data/dataset.py` | `SpoofDetectionDataset` |
+| DataLoader作成 | `mspoof_tts/data/dataset.py` | `SpoofDetectionDataset.create_dataloader()` |
+| 検出器モデル | `mspoof_tts/models/spoof_detector.py` | `SpoofDetector` |
+| 訓練設定 | `configs/detector_train.yaml` | YAML設定ファイル |
+| 設定ローダー | `mspoof_tts/config.py` | `load_training_config()` |
+
+### スクリプト
+
+| スクリプト | 説明 |
+|-----------|------|
+| `scripts/prepare_data.sh` | LibriTTSダウンロード + 合成データ生成の2段階パイプライン |
+| `scripts/train_detectors.sh` | 5検出器を順次訓練（各検出器のセグメントパラメータを自動設定） |
+
+### train.py の訓練ループ
+
+```
+シード設定 → SegmentExtractor → SpoofDetectionDataset → SpoofDetector(vocab_size=65536)
+→ AdamW + BCELoss + CosineAnnealingLR → train/val loop (AUC/F1/Accuracy)
+→ チェックポイント保存 (best + periodic + final as {name}.pt)
+```
+
+### データ形式
+
+- 訓練データ: JSONL形式（`prepare.py` が生成）
+- 各行: `{"utterance_id": ..., "speaker_id": ..., "tokens": [...], "label": "real"/"fake", "split": "train"/"val"/"test"}`
+- 分割比率: 話者単位で 90% train / 5% val / 5% test

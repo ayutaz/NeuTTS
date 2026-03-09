@@ -72,3 +72,31 @@ MSpoof-TTS では、golden（実音声由来）コーデックトークンと合
 - セグメント長が短くなるほど（L=50 → L=25 → L=10）性能が低下する傾向が見られる。これは短いセグメントでは捉えられる文脈情報が制限されるためと考えられる
 - Skip Sampling モデル（Model 4, 5）は、同じ出力トークン数の Contiguous Cropping モデル（Model 2, 3）と比較して、AUC は同程度だが F1 スコアに差異がある。スキップサンプリングは広い範囲の情報を粗く取得するため、連続クロッピングとは相補的な検出特性を持つ可能性がある
 - MSpoof-TTS の最終的なフレームワークでは、これら複数の解像度のモデルを **組み合わせて** 使用することで、単一解像度では捉えきれない多様なスケールの不整合を検出する
+
+## 実装の対応関係
+
+### コード構成
+
+| 論文の概念 | 実装ファイル | クラス/関数 |
+|-----------|------------|-----------|
+| 5つのスプーフ検出器 | `mspoof_tts/models/multi_resolution.py` | `MultiResolutionDetector` |
+| 単体検出器 | `mspoof_tts/models/spoof_detector.py` | `SpoofDetector` |
+| Contiguous Cropping | `mspoof_tts/data/segment.py` | `SegmentExtractor.contiguous_crop()` |
+| Skip Sampling | `mspoof_tts/data/segment.py` | `SegmentExtractor.skip_sample()` |
+| セグメントモード定義 | `mspoof_tts/data/segment.py` | `SegmentMode` (Enum) |
+| 訓練データセット | `mspoof_tts/data/dataset.py` | `SpoofDetectionDataset` |
+| 合成データ生成 | `mspoof_tts/data/prepare.py` | `prepare_dataset()` |
+| 検出器設定 | `mspoof_tts/config.py` | `DetectorConfig`, `get_detector_configs()` |
+
+### MultiResolutionDetector のメソッドと検出器の対応
+
+| メソッド | 使用検出器 | 用途 |
+|---------|-----------|------|
+| `score_short(tokens)` | M_10 | Stage 1 枝刈り |
+| `score_mid(tokens)` | M_25 | Stage 2 枝刈り |
+| `score_long(tokens)` | M_50, M_50←25, M_50←10 | 最終選択（ランク集約） |
+| `rank_aggregate(scores, weights)` | — | 重み付きランク集約 |
+
+### テスト
+
+- `tests/test_mspoof_models.py`: 26テスト（Conformer, SpoofDetector, MultiResolutionDetector, SegmentExtractor）

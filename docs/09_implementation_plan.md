@@ -58,6 +58,8 @@ MSpoof-TTS/
 
 ### Phase 1: 環境構築とベースTTS準備
 
+**状態: 完了**
+
 **目的**: 再現実装の基盤となる環境を整備し、ベースTTSの動作を確認する。
 
 1. **NeuTTSのセットアップ**
@@ -75,9 +77,19 @@ MSpoof-TTS/
 
 **成果物**: NeuTTSで任意のテキストから音声合成が可能な環境、NeuCodecでトークン化・復元が可能な状態。
 
+**実装ファイル:**
+- `CLAUDE.md` — プロジェクト概要とClaude Code向けガイダンス
+- `docs/*` — 論文分析ドキュメント（00〜09）
+- `configs/*` — YAML設定ファイル（`detector_train.yaml`, `inference.yaml`）
+- `mspoof_tts/__init__.py` — パッケージ初期化
+- `mspoof_tts/config.py` — YAML設定ローダー（7つのdataclass）
+- `requirements-mspoof.txt` — MSpoof-TTS固有の依存関係
+
 ---
 
 ### Phase 2: 合成データ生成
+
+**状態: 完了**
 
 **目的**: スプーフ検出器の訓練に必要な real/fake ペアデータセットを構築する。
 
@@ -94,9 +106,15 @@ MSpoof-TTS/
 
 **成果物**: real/fake ラベル付きの離散トークン列データセット（`mspoof_tts/data/prepare.py` で再現可能）。
 
+**実装ファイル:**
+- `mspoof_tts/data/prepare.py` — 合成データ生成パイプライン
+- `scripts/prepare_data.sh` — データ準備シェルスクリプト（LibriTTSダウンロード + 合成データ生成）
+
 ---
 
 ### Phase 3: スプーフ検出器の実装と訓練
+
+**状態: 完了**
 
 **目的**: 5つのマルチ解像度スプーフ検出器を実装し、個別に訓練する。
 
@@ -146,9 +164,22 @@ Embedding Layer → Conformer Block × 4 → Adaptive Pooling → Classifier Hea
 
 **成果物**: 訓練済みの5つのスプーフ検出器チェックポイント。
 
+**実装ファイル:**
+- `mspoof_tts/models/conformer.py` — Conformerブロック（FFN, ConvModule, ConformerBlock）
+- `mspoof_tts/models/spoof_detector.py` — SpoofDetector（Embedding + Conformer + Classifier）
+- `mspoof_tts/models/multi_resolution.py` — MultiResolutionDetector（5検出器の統合管理）
+- `mspoof_tts/data/segment.py` — セグメント構築（contiguous cropping, skip sampling）
+- `mspoof_tts/data/dataset.py` — SpoofDetectionDataset（JSONL, DataLoader）
+- `train.py` — スプーフ検出器の訓練エントリポイント
+- `scripts/train_detectors.sh` — 5検出器の訓練スクリプト
+
+**テスト:** `tests/test_mspoof_models.py`（26テスト） — Conformer, SpoofDetector, MultiResolutionDetector, Segment
+
 ---
 
 ### Phase 4: Entropy-Aware Sampling (EAS)
+
+**状態: 完了**
 
 **目的**: Algorithm 1 に基づく EAS を実装し、ベースTTSのデコーディングに統合する。
 
@@ -186,9 +217,19 @@ penalty(t) = α × inverse_rank_weight(t) × exp(-β × elapsed_time(t))
 
 **成果物**: `mspoof_tts/sampling/eas.py` — NeuTTSのデコーディングループに統合可能なEASモジュール。
 
+**実装ファイル:**
+- `mspoof_tts/sampling/utils.py` — top-k, nucleus sampling, entropy, rank計算
+- `mspoof_tts/sampling/eas.py` — Entropy-Aware Sampling（Algorithm 1）
+- `inference.py` — 推論エントリポイント（EASモード）
+- `scripts/inference.sh` — 推論実行スクリプト（EAS/hierarchicalモード）
+
+**テスト:** `tests/test_eas.py`（28テスト） — EAS, MemoryBuffer, sampling utils
+
 ---
 
 ### Phase 5: Hierarchical Spoof-Guided Sampling
+
+**状態: 完了**
 
 **目的**: Algorithm 2 に基づく階層的サンプリングを実装し、マルチ解像度検出器を用いた品質誘導デコーディングを実現する。
 
@@ -235,9 +276,17 @@ final_score = w1 × rank(M_50) + w2 × rank(M_50←25) + w3 × rank(M_50←10)
 
 **成果物**: `mspoof_tts/sampling/hierarchical.py` — 階層的デコーディングの完全な実装。
 
+**実装ファイル:**
+- `mspoof_tts/sampling/hierarchical.py` — Hierarchical Decoding（Algorithm 2）
+- `inference.py` — 推論エントリポイント（hierarchicalモード）
+
+**テスト:** `tests/test_hierarchical.py`（14テスト） — HierarchicalDecoder（各ステージ、E2E）
+
 ---
 
 ### Phase 6: 評価
+
+**状態: 完了**
 
 **目的**: 再現実装の出力品質を定量的に評価し、論文の報告値と比較する。
 
@@ -263,6 +312,13 @@ final_score = w1 × rank(M_50) + w2 × rank(M_50←25) + w3 × rank(M_50←10)
 3. 論文の Table 2, Table 3 等の再現を試みる
 
 **成果物**: 評価スクリプト（`scripts/evaluate.sh`）および結果の集計。
+
+**実装ファイル:**
+- `mspoof_tts/evaluation/metrics.py` — WER, SIM, NISQA, MOSNET計算
+- `mspoof_tts/evaluation/evaluate.py` — EvaluationPipeline（評価パイプライン）
+- `scripts/evaluate.sh` — 評価実行スクリプト
+
+**テスト:** `tests/test_evaluation.py`（41テスト） — WER, SIM, NISQA, MOSNET, EvaluationPipeline
 
 ---
 
@@ -320,16 +376,16 @@ final_score = w1 × rank(M_50) + w2 × rank(M_50←25) + w3 × rank(M_50←10)
 
 ## 5. 実装優先度とタイムライン（目安）
 
-| フェーズ | 推定期間 | 優先度 | 前提条件 |
+| フェーズ | 推定期間 | 状態 | 前提条件 |
 |---|---|---|---|
-| Phase 1: 環境構築 | 1 週間 | 最高 | なし |
-| Phase 2: 合成データ生成 | 1-2 週間 | 最高 | Phase 1 完了 |
-| Phase 3: 検出器の実装と訓練 | 2-3 週間 | 高 | Phase 2 完了 |
-| Phase 4: EAS | 1 週間 | 高 | Phase 1 完了（Phase 3 と並行可能） |
-| Phase 5: 階層的サンプリング | 2 週間 | 高 | Phase 3, 4 完了 |
-| Phase 6: 評価 | 1 週間 | 中 | Phase 5 完了 |
+| Phase 1: 環境構築 | 1 週間 | **完了** | なし |
+| Phase 2: 合成データ生成 | 1-2 週間 | **完了** | Phase 1 完了 |
+| Phase 3: 検出器の実装と訓練 | 2-3 週間 | **完了** | Phase 2 完了 |
+| Phase 4: EAS | 1 週間 | **完了** | Phase 1 完了（Phase 3 と並行可能） |
+| Phase 5: 階層的サンプリング | 2 週間 | **完了** | Phase 3, 4 完了 |
+| Phase 6: 評価 | 1 週間 | **完了** | Phase 5 完了 |
 
-**合計推定期間**: 約 8-10 週間
+**全フェーズ完了。合計テスト数: 109テスト**（26 + 28 + 14 + 41）
 
 ---
 

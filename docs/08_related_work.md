@@ -66,3 +66,30 @@
 - **マルチ解像度評価**: 複数の時間スケールでauthenticityを評価し、局所的な不自然さと全体的な一貫性の両方を捉える。
 - **デコーディング統合**: post-hoc分類ではなく、生成プロセス中にリアルタイムでガイダンスを提供する。Controllable Text Generationの知見を音声合成に転用したアプローチである。
 - **Training-free（TTS側）**: ベースTTSモデルのパラメータを一切変更しないため、任意のコーデックベースTTSにプラグインとして適用可能である。
+
+---
+
+## 実装における関連技術の活用
+
+本プロジェクトの実装において、論文で言及された関連技術は以下のように活用されている。
+
+### Controllable Text Generation の適用
+
+論文で言及された Dexperts や Plug and Play LM の考え方は、`HierarchicalDecoder` の設計に反映されている。スプーフ検出器が外部分類器として機能し、デコーディング中にauthenticityスコアに基づいて候補を選別する。
+
+- 実装: `mspoof_tts/sampling/hierarchical.py` の `_stage1_prune()`, `_stage2_prune()`, `_final_select()`
+
+### RAS から EAS への改良
+
+VALL-E 2 の Repetition-Aware Sampling を改良した Entropy-Aware Sampling は、以下の点で実装に反映：
+
+- ランクベースの重み付け: `MemoryBuffer.get_penalty()` の `1.0 / (1.0 + ranks)` 項
+- 指数的時間減衰: `beta ** ages` 項
+- クリッピング: `torch.clamp(penalty, max=gamma)` 項
+- 実装: `mspoof_tts/sampling/eas.py`
+
+### 音声スプーフ検出技術の転用
+
+従来は事後的な分類に使われていたスプーフ検出を、離散トークン列に直接適用しデコーディングをガイドする新規アプローチ。Conformerアーキテクチャの局所的特徴抽出と大域的依存性捕捉の両方の特性を活用。
+
+- 実装: `mspoof_tts/models/conformer.py`, `spoof_detector.py`, `multi_resolution.py`

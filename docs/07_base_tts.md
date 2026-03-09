@@ -91,3 +91,33 @@ MSpoof-TTS は、上記の関連システムとは根本的に異なるアプロ
 | コーデック設計の改良 | NaturalSpeech 3, CosyVoice | MSpoof-TTS は既存コーデックをそのまま使用 |
 
 MSpoof-TTS の核心的な貢献は、スプーフ検出という従来は事後的な音声分類に使われていた技術を、デコーディング過程にリアルタイムで統合し、生成中のトークン列の品質を継続的に評価・制御する点にある。
+
+---
+
+## 実装の対応関係
+
+### コード構成
+
+| 論文の概念 | 実装ファイル | クラス/関数 |
+|-----------|------------|-----------|
+| NeuTTSによる推論 | `inference.py` | `generate_with_eas()`, `generate_with_hierarchical()` |
+| カスタムARループ | `inference.py` | `generate_with_eas()` 内のKV-cache付きループ |
+| NeuCodecエンコード | `mspoof_tts/data/prepare.py` | `encode_audio_to_tokens()` |
+| プロンプト構築 | `inference.py` | `_apply_chat_template()` |
+| トークン→音声変換 | `inference.py` | `tokens_to_speech_string()` |
+| 推論設定 | `configs/inference.yaml` | EAS/階層的デコーディングのハイパーパラメータ |
+| 設定ローダー | `mspoof_tts/config.py` | `load_inference_config()` |
+
+### カスタム生成ループの必要性
+
+NeuTTSの標準 `generate()` メソッドは生のlogitsを外部に公開しないため、EASやHierarchical Decodingでトークンレベルのサンプリング制御を行うには、カスタムの自己回帰ループが必要である。`inference.py` では以下のアプローチを採用：
+
+1. `backbone(input_ids)` でraw logitsを直接取得
+2. KV-cacheを活用して効率的に逐次生成
+3. EASサンプラーの `sample_step(logits)` でトークンを選択
+
+### スクリプト
+
+| スクリプト | 説明 |
+|-----------|------|
+| `scripts/inference.sh` | EAS/hierarchicalモードの切り替え、全ハイパーパラメータの引数/環境変数指定 |

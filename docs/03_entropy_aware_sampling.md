@@ -121,3 +121,38 @@ EAS はこれらの課題に対して、以下の改善を導入する。
 1. **ランクベースの重み付け**: トークンのランク位置に基づく重み付けにより、きめ細かいペナルティ制御を実現する。
 2. **指数的時間減衰**: 時間的経過に応じてペナルティを自然に減衰させることで、直近の文脈をより重視する。
 3. **クリッピング機構**: ペナルティ上限の設定により、分布の多様性を維持しつつ過度な抑制を防止する。
+
+## 実装の対応関係
+
+### コード構成
+
+| 論文の概念 | 実装ファイル | クラス/関数 |
+|-----------|------------|-----------|
+| Algorithm 1 全体 | `mspoof_tts/sampling/eas.py` | `EntropyAwareSampler` |
+| メモリバッファ | `mspoof_tts/sampling/eas.py` | `MemoryBuffer` |
+| メモリエントリ | `mspoof_tts/sampling/eas.py` | `MemoryEntry` (dataclass) |
+| ペナルティ計算 | `mspoof_tts/sampling/eas.py` | `MemoryBuffer.get_penalty()` |
+| サンプリングステップ | `mspoof_tts/sampling/eas.py` | `EntropyAwareSampler.sample_step()` |
+| 温度スケーリング | `mspoof_tts/sampling/utils.py` | `apply_temperature()` |
+| top-kフィルタ | `mspoof_tts/sampling/utils.py` | `top_k_filter()` |
+| Nucleus Sampling | `mspoof_tts/sampling/utils.py` | `nucleus_sample()` |
+| エントロピー計算 | `mspoof_tts/sampling/utils.py` | `compute_entropy()` |
+| ランク計算 | `mspoof_tts/sampling/utils.py` | `rank_tokens()` |
+
+### Algorithm 1 と sample_step() の対応
+
+| アルゴリズムのステップ | 実装箇所 |
+|---------------------|---------|
+| ステップ 1: 確率分布の取得 | `probs = torch.softmax(logits / self.temperature, dim=-1)` |
+| ステップ 2: ペナルティ計算 | `penalty = self.memory.get_penalty(vocab_size, alpha, beta, gamma)` |
+| ステップ 3: 条件付き適用 | `if H.item() > entropy_threshold: adjusted_probs = probs - penalty` |
+| ステップ 4: Nucleus Sampling | `token_id = nucleus_sample(filtered_logits, self.top_p)` |
+| ステップ 5-6: クラスタ取得・メモリ更新 | `top_k_indices` → `MemoryEntry` → `self.memory.add()` |
+
+### ペナルティのベクトル化実装
+
+`MemoryBuffer.get_penalty()` では、ループではなく `scatter_add_` によるベクトル化計算でペナルティを集約している。
+
+### テスト
+
+- `tests/test_eas.py`: 28テスト（temperature, top-k, nucleus, entropy, rank, MemoryBuffer, EntropyAwareSampler）
